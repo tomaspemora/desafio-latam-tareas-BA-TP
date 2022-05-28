@@ -1,5 +1,4 @@
-# comentario ba prueba
-# comentario de thomas
+
 # No modificar
 from verify import verificar
 import preguntas as p
