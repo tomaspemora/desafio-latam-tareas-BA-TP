@@ -2,13 +2,6 @@ import preguntas as p
 from shuffle import shuffle_alt
 
 def verificar(alternativas, eleccion):
-    # alternativas es    [
-    #                       ['alt_a', 0],
-                        #   ['alt_c', 0],
-                        #   ['alt_b', 1],
-                        #   ['alt_d', 0]
-                        # ]
-    # eleccion es 'a'
     #devuelve el índice de elección dada
     eleccion = ['a', 'b', 'c', 'd'].index(eleccion)
 
