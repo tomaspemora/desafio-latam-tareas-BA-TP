@@ -15,13 +15,14 @@ def choose_q(dificultad):
         preguntas = p.preguntas_basicas
     elif dificultad == 'intermedias':
         preguntas = p.preguntas_intermedias
-    elif dificultad == 'avanzandas':
+    elif dificultad == 'avanzadas':
         preguntas = p.preguntas_avanzadas
 
     # usar opciones desde ambiente global
     global opciones
     
     # escoger una pregunta
+    
     opcion = opciones[dificultad]
     n_elegido = random.choice(opcion)
     
