@@ -1,0 +1,4 @@
+pull -> git pull origin master
+push -> git push origin master
+commit -> git commit -m "mensaje"
+stash change -> git add .
