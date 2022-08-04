@@ -1,6 +1,7 @@
 import numpy as np
 from IPython.display import display
 import pandas as pd
+from sklearn.metrics import r2_score, mean_squared_error
 
 def pretty(d, indent=0):
     for key, value in d.items():
@@ -20,7 +21,7 @@ def make_pretty(styler, num_format='{:.2f}'):
     d3 = dict(selector=".index_name",props=[('text-align', 'center')])
     d4 = dict(selector="th.col_heading",props=[('text-align', 'center')])
     styler.format(num_format)
-    styler.format_index(lambda v: v.upper())
+    #styler.format_index(lambda v: v.upper())
     styler.background_gradient(axis=None, cmap="YlGnBu")
     styler.set_table_styles([d1,d2,d3,d4])
     styler.set_properties(**{'border': '1px black solid !important', 'text-align': 'center'})
@@ -28,7 +29,7 @@ def make_pretty(styler, num_format='{:.2f}'):
     styler.set_table_styles([{'selector': 'td','props': [('border', '2px black solid !important'), ('min-width','90px'), ('max-width','90px'), ('width','90px'), ('text-align','center')]}])
     styler.set_table_styles([{'selector': '.index_name','props': [('border', '2px black solid !important'), ('min-width','90px'), ('max-width','90px'), ('width','90px'), ('text-align','center')]}])
     styler.set_table_styles([{'selector': 'th.col_heading','props': [('border', '2px black solid !important'), ('min-width','90px'), ('max-width','90px'), ('width','90px'), ('text-align','center')]}])
-    styler.applymap_index(lambda v: "min-width:90px;max-width:90px;width:90px", axis=0)
+    #styler.applymap_index(lambda v: "min-width:90px;max-width:90px;width:90px", axis=0)
     return styler
 
 def get_type_vars(df):
@@ -47,3 +48,12 @@ def describe_variables(df):
     print("-------------------Variables Numéricas----------------------")
     print("------------------------------------------------------------")
     display(df.select_dtypes(include=['number']).describe().T.style.pipe(make_pretty, num_format='{:.1f}'))
+
+def evaluation(model, real, preds):
+    print(f"AIC es : {model.aic}")
+    print(f"BIC es : {model.bic}")
+    print(f"Condition Number: {model.condition_number}")
+    print(f"R2: {r2_score(real, preds)}")
+    print(f"RMSE: {mean_squared_error(real, preds, squared=False)} ")
+    
+
