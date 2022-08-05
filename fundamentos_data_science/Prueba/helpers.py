@@ -74,9 +74,12 @@ def OrdinalEncoderListCategories(df, direction = 'ascending', bin_or_num = 'bin'
 
 
 def test_factor_analyzer(dataf):
-    _, p_value = calculate_bartlett_sphericity(dataf)
+    data_np = dataf.values
+    _, p_value = calculate_bartlett_sphericity(data_np)
     p_value #p_value tiene que ser menor que un nivel de significancia 0.05, OK para poder usar factor analyzer
     print(f'p_value: {p_value}. Tiene que ser menor que un nivel de significancia 0.05, OK para poder usar factor analyzer')
-    kmo_all, kmo_model = calculate_kmo(dataf)
+    kmo_all, kmo_model = calculate_kmo(data_np)
     kmo_model  # si kmo_model es menor a 0.6 el factor analyzer no se puede hacer... 0.7 dice la lectura
     print(f'El valor de kmo es {kmo_model}. Si kmo_model es menor a 0.6 el factor analyzer no se puede hacer... 0.7 dice la lectura ')
+    display(pd.DataFrame({"KMO_ALL":kmo_all},index = dataf.columns))
+    
