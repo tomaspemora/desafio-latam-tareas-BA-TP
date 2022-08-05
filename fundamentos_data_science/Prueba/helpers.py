@@ -56,4 +56,12 @@ def evaluation(model, real, preds):
     print(f"R2: {r2_score(real, preds)}")
     print(f"RMSE: {mean_squared_error(real, preds, squared=False)} ")
     
-
+def OrdinalEncoderListCategories(df, direction = 'ascending', bin_or_num = 'bin'):
+    if direction == 'ascending':
+        if bin_or_num == 'bin':
+            return [df[col].value_counts(sort=True, ascending = True).index.to_list() for col in df.select_dtypes(np.object_).columns.to_list() if len(df[col].value_counts()) == 2]
+        else:
+            return [df[col].value_counts(sort=True, ascending = True).index.to_list() for col in df.select_dtypes(np.object_).columns.to_list() if len(df[col].value_counts()) > 2]
+    if bin_or_num == 'bin':
+        return [df[col].value_counts(sort=True, ascending = False).index.to_list() for col in df.select_dtypes(np.object_).columns.to_list() if len(df[col].value_counts()) == 2]
+    return [df[col].value_counts(sort=True, ascending = False).index.to_list() for col in df.select_dtypes(np.object_).columns.to_list() if len(df[col].value_counts()) > 2]
