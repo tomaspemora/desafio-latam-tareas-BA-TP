@@ -7,6 +7,7 @@ from factor_analyzer import calculate_bartlett_sphericity
 from sklearn.metrics import r2_score, mean_squared_error, median_absolute_error
 from IPython.display import HTML
 
+
 ## AGREGAR DOCSTRING
 
 #ELIMINAR PRETTY
@@ -108,9 +109,9 @@ def report_regression_metrics(model, X_test, y_test):
     rmse_val = np.sqrt(mean_squared_error(y_test, y_pred)).round(3)
     mae_val = median_absolute_error(y_test,y_pred).round(3)
 
-    print('Test R^2: {0}'.format(r2_val))
-    print('Test RMSE: {0}'.format(rmse_val))
-    print('Test Median Absolute Error:{0}'.format(mae_val))
+    #print('Test R^2: {0}'.format(r2_val))
+    #print('Test RMSE: {0}'.format(rmse_val))
+    #print('Test Median Absolute Error:{0}'.format(mae_val))
     return {'r2_score':r2_val, 'rmse':rmse_val, 'mae':mae_val}
 
 
@@ -126,3 +127,5 @@ def reporte_modelos(models_dict):
             table_str += f"<td>{models_dict[model][metric]:.4f}</td>"
         table_str += '</tr>'
     display(HTML(table_str))
+
+
