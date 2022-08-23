@@ -1,12 +1,11 @@
 import numpy as np
 from IPython.display import display
 import pandas as pd
-from sklearn.metrics import r2_score, mean_squared_error
 from factor_analyzer.factor_analyzer import calculate_kmo
 from factor_analyzer import calculate_bartlett_sphericity
 from sklearn.metrics import r2_score, mean_squared_error, median_absolute_error
 from IPython.display import HTML
-
+import pickle
 
 ## AGREGAR DOCSTRING
 
@@ -103,16 +102,22 @@ def test_factor_analyzer(dataf):
 
 
 
-def report_regression_metrics(model, X_test, y_test):
+def report_regression_metrics(model, X_test, y_test, metrics):
     y_pred = model.predict(X_test)
-    r2_val = r2_score(y_test, y_pred).round(3)
-    rmse_val = np.sqrt(mean_squared_error(y_test, y_pred)).round(3)
-    mae_val = median_absolute_error(y_test,y_pred).round(3)
+    # metrics = {
+    #     'r2_score': r2_score,
+    #     'rmse_val': np.sqrt(mean_squared_error),
+    #     'mae_val': median_absolute_error
+    # }
+    metrics_results = {}
+    for metric_name,metric_function in metrics.items():
+        metrics_results[metric_name] = metric_function(y_test,y_pred).round(3)
 
-    #print('Test R^2: {0}'.format(r2_val))
-    #print('Test RMSE: {0}'.format(rmse_val))
-    #print('Test Median Absolute Error:{0}'.format(mae_val))
-    return {'r2_score':r2_val, 'rmse':rmse_val, 'mae':mae_val}
+        # r2_val = r2_score(y_test, y_pred).round(3)
+        # rmse_val = np.sqrt(mean_squared_error(y_test, y_pred)).round(3)
+        # mae_val = median_absolute_error(y_test,y_pred).round(3)
+    return metrics_results
+    # return {'r2_score':r2_val, 'rmse':rmse_val, 'mae':mae_val}
 
 
 def reporte_modelos(models_dict):
@@ -128,4 +133,11 @@ def reporte_modelos(models_dict):
         table_str += '</tr>'
     display(HTML(table_str))
 
+def save_bytes_variable(variable_dict, nombre_archivo):
+    file = open(nombre_archivo, 'wb')
+    pickle.dump(variable_dict, file)
+    file.close()
 
+def load_bytes_variable(nombre_archivo):
+    with open(nombre_archivo, 'rb') as f:
+        return pickle.load(f)
