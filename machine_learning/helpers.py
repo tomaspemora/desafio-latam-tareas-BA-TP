@@ -141,3 +141,15 @@ def save_bytes_variable(variable_dict, nombre_archivo):
 def load_bytes_variable(nombre_archivo):
     with open(nombre_archivo, 'rb') as f:
         return pickle.load(f)
+
+def cat_num_rate_analysis(df):
+    cat_num_rate = df.apply(lambda col: (len(col.unique())/len(col), len(col.unique()), len(col),col.dtype ,  col.unique()))
+    cmr = pd.DataFrame(cat_num_rate.T)
+    cmr.columns=["num_to_cat_rate", "len of unique", "len of data", "col type", "unique of col"]
+    max_rows = pd.get_option('display.max_rows')
+    max_width = pd.get_option('display.max_colwidth')
+    pd.set_option('display.max_colwidth', 150)
+    pd.set_option('display.max_rows', None)
+    display(cmr.sort_values(by="num_to_cat_rate",ascending=False))
+    pd.set_option('display.max_rows', max_rows)
+    pd.set_option('display.max_colwidth', max_width)
