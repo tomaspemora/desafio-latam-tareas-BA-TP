@@ -105,20 +105,10 @@ def test_factor_analyzer(dataf):
 
 def report_regression_metrics(model, X_test, y_test, metrics):
     y_pred = model.predict(X_test)
-    # metrics = {
-    #     'r2_score': r2_score,
-    #     'rmse_val': np.sqrt(mean_squared_error),
-    #     'mae_val': median_absolute_error
-    # }
     metrics_results = {}
     for metric_name,metric_function in metrics.items():
         metrics_results[metric_name] = metric_function(y_test,y_pred).round(3)
-
-        # r2_val = r2_score(y_test, y_pred).round(3)
-        # rmse_val = np.sqrt(mean_squared_error(y_test, y_pred)).round(3)
-        # mae_val = median_absolute_error(y_test,y_pred).round(3)
     return metrics_results
-    # return {'r2_score':r2_val, 'rmse':rmse_val, 'mae':mae_val}
 
 
 def reporte_modelos(models_dict):
