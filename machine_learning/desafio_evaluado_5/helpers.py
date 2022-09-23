@@ -41,7 +41,7 @@ def plot_classification_report(y_true, y_hat, method):
         markers = 'x'
     else:
         colors = ['green', 'royalblue','khaki','darkviolet']
-        markers = 's'
+        markers = '+'
 
     for i in class_labels:
         plt.plot(class_report['prec'][i], [1], marker=markers, color=colors[i])
