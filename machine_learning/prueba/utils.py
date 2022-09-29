@@ -11,6 +11,8 @@ import inspect, re
 import nltk
 from nltk.corpus import stopwords
 from sklearn.base import BaseEstimator, TransformerMixin
+from nltk.tokenize import sent_tokenize, word_tokenize
+import random
 ## AGREGAR DOCSTRING
 
 #ELIMINAR PRETTY
@@ -105,14 +107,12 @@ def test_factor_analyzer(dataf):
     display(pd.DataFrame({"KMO_ALL":kmo_all},index = dataf.columns))
 
 
-
 def report_regression_metrics(model, X_test, y_test, metrics):
     y_pred = model.predict(X_test)
     metrics_results = {}
     for metric_name,metric_function in metrics.items():
         metrics_results[metric_name] = metric_function(y_test,y_pred).round(3)
     return metrics_results
-
 
 def reporte_modelos(models_dict):
     # models_dict
@@ -166,7 +166,21 @@ def varname(p):
         if m:
             return m.group(1)
 
+### Especificas para prueba Machine Learning twitter.
 
+
+def columns_reorder(X, new_columns_ordered):
+    if sorted(X.columns.to_list()) == sorted(new_columns_ordered):
+        return X[new_columns_ordered]
+    return X
+
+def multi_class_remapping(X,group_classes = {}, var_name='sentiment', neutral_class='neutral', random_state=42):
+    list_sentiments = list(set(group_classes.values()))
+    list_sentiments.remove(neutral_class)
+    random.seed(random_state)
+    X[f'{var_name}_remapped'] = X[var_name].map(group_classes).apply(lambda s: 
+    random.choice(list_sentiments) if s == neutral_class else s)
+    return X
 class PreprocBCT():
     def __init__(self, under=None, upper=None, threshold=.8):
         self.selector = None
@@ -203,16 +217,15 @@ class PreprocBCT():
         self.fit(X, Y)
         return self.transform(X, Y)
 
-
 class RemoveStopWords(BaseEstimator,TransformerMixin):
-    def __init__(self, columns=[]):
+    def __init__(self, text_columns=[]):
         try:
             nltk.data.find('corpora/stopwords')
         except LookupError:
             nltk.download('words',download_dir='.')
 
         self.dictionary = stopwords.words('english')
-        self.columns = columns
+        self.columns = text_columns
 
     def fit(self, X, Y):
         return self
@@ -225,7 +238,7 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
         NX = X.copy()
         try:
             for col in self.columns:
-                NX[f"{col}_min"] = NX[col].apply(self.create_clean_column)
+                NX[f"{col}_sw"] = NX[col].apply(self.create_clean_column)
         except Exception as err:
             print('RemoveStopWords.transform(): {}'.format(err))
         return NX
@@ -235,32 +248,51 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
         return self.transform(X, Y)
 
 class LemmantizerTransformer(BaseEstimator,TransformerMixin):
-    def __init__(self, columns=[]):
+    def __init__(self, text_columns=[], stemmers='ps'):
         try:
-            nltk.data.find('corpora/wordnet.zip/wordnet/')
+            nltk.data.find('corpora/wordnet.zip')
+            nltk.data.find('corpora/omw-1.4.zip/omw-1.4/')
         except LookupError:
-            nltk.download('wordnet', download_dir='.')
-        self.ps = nltk.stemmer.PorterStemmer()
+            nltk.download('wordnet')
+            nltk.download('omw-1.4')
         self.wnl = nltk.wordnet.WordNetLemmatizer()
         self.sno = nltk.stem.SnowballStemmer('english')
-        self.columns = columns
+        self.ps = nltk.stem.PorterStemmer()
+        self.columns = text_columns
+        self.stemmers = stemmers
 
     def fit(self, X, Y):
         return self
 
-    def create_lemma_column(self,twitt, lemma):
-        if lemma == 'ps':
-            return self.ps(twitt)
-        return " ".join([word for word in twitt.split(" ") if word not in self.dictionary]).lower()
+    def stemSentence(self, sentence, stemmer):
+        token_words=word_tokenize(sentence)
+        token_words
+        stem_sentence=[]
+        for word in token_words:
+            stem_sentence.append(stemmer(word))
+            stem_sentence.append(" ")
+        return "".join(stem_sentence)
+
+    def create_lemma_column(self,twitt, method):
+        if method == 'ps':
+            return self.stemSentence(twitt, self.ps.stem)
+        if method == 'sno':
+            return self.stemSentence(twitt, self.sno.stem)
+        if method == 'lemma':
+            return self.stemSentence(twitt, self.wnl.lemmatize)
+        return twitt
 
 
     def transform(self, X, Y=None):
         NX = X.copy()
         try:
             for col in self.columns:
-                NX[f"{col}_ps"] = NX[col].apply(self.create_lemma_column, method='ps')
-                NX[f"{col}_sno"] = NX[col].apply(self.create_lemma_column, method = 'sno')
-                NX[f"{col}_wnl"] = NX[col].apply(self.create_lemma_column, method = 'wnl')
+                if 'ps' in self.stemmers:
+                    NX[f"{col}_ps"] = NX[col].apply(self.create_lemma_column, method='ps')
+                if 'sno' in self.stemmers:
+                    NX[f"{col}_sno"] = NX[col].apply(self.create_lemma_column, method = 'sno')
+                if 'wnl' in self.stemmers:
+                    NX[f"{col}_wnl"] = NX[col].apply(self.create_lemma_column, method = 'wnl')
         except Exception as err:
             print('LemmantizerTransformer.transform(): {}'.format(err))
         return NX
@@ -270,29 +302,24 @@ class LemmantizerTransformer(BaseEstimator,TransformerMixin):
         return self.transform(X, Y)
 
 class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
-    def __init__(self, twit_text_column="content_min", features_to_extract = []):
+    def __init__(self, text_column="content_min", features_to_extract = []):
         try:
             nltk.data.find('corpora/stopwords')
         except LookupError:
             nltk.download('words',download_dir='.')
 
         self.dictionary = stopwords.words('english')
-        self.twit_text_column = twit_text_column
+        self.twit_text_column = text_column
         self.features_to_extract = features_to_extract
         
     def fit(self, X, Y):
         return self
 
     def regex_count(self,twitt,patt=r'(\#[a-zA-Z0-9]*)'):
-        # print(patt)
         pattern = re.compile(patt, re.IGNORECASE)
         res = re.findall(pattern, twitt)
         return len(res)
-        # print(lenres)
-        # if res != None:
-        #     return len(res)
-        # return 0
-
+        
     def is_reply(self,twitt):
         if self.regex_count(twitt,patt=r'(^\@[a-zA-Z0-9]*)')>0:
             return 1
@@ -302,11 +329,11 @@ class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
         NX = X.copy()
         try:
             if "arrobas_count" in self.features_to_extract:
-                NX[f"arrobas_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\@[a-zA-Z0-9]*)')
+                NX[f"var_arrobas_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\@[a-zA-Z0-9]*)')
             if "hashtag_count" in self.features_to_extract:
-                NX[f"hashtag_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\#[a-zA-Z0-9]*)')
+                NX[f"var_hashtag_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\#[a-zA-Z0-9]*)')
             if "is_reply" in self.features_to_extract:
-                NX[f"is_reply"] = NX[self.twit_text_column].apply(self.is_reply)
+                NX[f"var_is_reply"] = NX[self.twit_text_column].apply(self.is_reply)
         except Exception as err:
             print('FeatureExtractionTwitts.transform(): {}'.format(err))
         return NX
