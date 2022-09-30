@@ -12,6 +12,7 @@ import nltk
 from nltk.corpus import stopwords
 from sklearn.base import BaseEstimator, TransformerMixin
 from nltk.tokenize import sent_tokenize, word_tokenize
+from textblob import TextBlob
 import random
 ## AGREGAR DOCSTRING
 
@@ -181,6 +182,12 @@ def multi_class_remapping(X,group_classes = {}, var_name='sentiment', neutral_cl
     X[f'{var_name}_remapped'] = X[var_name].map(group_classes).apply(lambda s: 
     random.choice(list_sentiments) if s == neutral_class else s)
     return X
+
+
+def remove_arrobas(X, var_name='content'):
+    X[f'{var_name}_remarroba'] = X[var_name].apply(lambda s: re.sub(r'(\@[a-zA-Z0-9\-\_]*)', '', s))
+    return X
+
 class PreprocBCT():
     def __init__(self, under=None, upper=None, threshold=.8):
         self.selector = None
@@ -246,6 +253,7 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
         return self.transform(X, Y)
+
 
 class LemmantizerTransformer(BaseEstimator,TransformerMixin):
     def __init__(self, text_columns=[], stemmers='ps'):
@@ -315,25 +323,46 @@ class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
     def fit(self, X, Y):
         return self
 
-    def regex_count(self,twitt,patt=r'(\#[a-zA-Z0-9]*)'):
+    def regex_count(self,twitt,patt=r'(\#[a-zA-Z0-9\-\_]*)',threshold=3):
         pattern = re.compile(patt, re.IGNORECASE)
         res = re.findall(pattern, twitt)
-        return len(res)
+        return min(len(res),threshold)
         
     def is_reply(self,twitt):
-        if self.regex_count(twitt,patt=r'(^\@[a-zA-Z0-9]*)')>0:
+        if self.regex_count(twitt,patt=r'(^\@[a-zA-Z0-9\-\_]*)')>0:
             return 1
         return 0
+                
+    def is_rt(self,twitt):
+        if self.regex_count(twitt,patt=r'(^RT*)')>0:
+            return 1
+        return 0
+
+    def getSubjectivity(self, text):
+        return TextBlob(text).sentiment.subjectivity
+
+    def getPolarity(self, text):
+        return TextBlob(text).sentiment.polarity
 
     def transform(self, X, Y=None):
         NX = X.copy()
         try:
             if "arrobas_count" in self.features_to_extract:
-                NX[f"var_arrobas_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\@[a-zA-Z0-9]*)')
+                NX[f"var_arrobas_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\@[a-zA-Z0-9\-\_]*)', threshold=3)
             if "hashtag_count" in self.features_to_extract:
-                NX[f"var_hashtag_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\#[a-zA-Z0-9]*)')
+                NX[f"var_hashtag_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\#[a-zA-Z0-9\-\_]*)', threshold=1)
             if "is_reply" in self.features_to_extract:
                 NX[f"var_is_reply"] = NX[self.twit_text_column].apply(self.is_reply)
+            if "is_rt" in self.features_to_extract:
+                NX[f"var_is_rt"] = NX[self.twit_text_column].apply(self.is_rt)
+            if "subjectivity" in self.features_to_extract:
+                NX[f"var_subjectivity"] = NX[self.twit_text_column].apply(self.getSubjectivity) 
+            if "polarity" in self.features_to_extract:
+                NX[f"var_polarity"] = NX[self.twit_text_column].apply(self.getPolarity)
+            if "twitt_length" in self.features_to_extract:
+                NX[f"var_twit_length"] = NX[self.twit_text_column].apply(lambda x: len(x))
+            
+
         except Exception as err:
             print('FeatureExtractionTwitts.transform(): {}'.format(err))
         return NX
