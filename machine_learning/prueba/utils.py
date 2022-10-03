@@ -14,6 +14,12 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from nltk.tokenize import sent_tokenize, word_tokenize
 from textblob import TextBlob
 import random
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.compose import ColumnTransformer
+import pandas as pd
+from sklearn.pipeline import Pipeline
+
 ## AGREGAR DOCSTRING
 
 #ELIMINAR PRETTY
@@ -95,8 +101,6 @@ def OrdinalEncoderListCategories(df, direction = 'ascending', bin_or_num = 'bin'
         return [df[col].value_counts(sort=True, ascending = False).index.to_list() for col in df.select_dtypes(np.object_).columns.to_list() if len(df[col].value_counts()) == 2]
     return [df[col].value_counts(sort=True, ascending = False).index.to_list() for col in df.select_dtypes(np.object_).columns.to_list() if len(df[col].value_counts()) > 2]
 
-
-
 def test_factor_analyzer(dataf):
     data_np = dataf.values
     _, p_value = calculate_bartlett_sphericity(data_np)
@@ -106,7 +110,6 @@ def test_factor_analyzer(dataf):
     kmo_model  # si kmo_model es menor a 0.6 el factor analyzer no se puede hacer
     print(f'El valor de kmo es {kmo_model}. Si kmo_model es menor a 0.6 el factor analyzer no se puede hacer... 0.7 dice la lectura ')
     display(pd.DataFrame({"KMO_ALL":kmo_all},index = dataf.columns))
-
 
 def report_regression_metrics(model, X_test, y_test, metrics):
     y_pred = model.predict(X_test)
@@ -149,7 +152,6 @@ def cat_num_rate_analysis(df):
     pd.set_option('display.max_rows', max_rows)
     pd.set_option('display.max_colwidth', max_width)
 
-
 def train_function(pipe, X_train, X_test, y_train, y_test):
     pipe.fit(X_train, y_train)
     y_pred_train = pipe.predict(X_train)
@@ -160,7 +162,6 @@ def train_function(pipe, X_train, X_test, y_train, y_test):
     print(classification_report(y_test, y_pred, digits=4))
     return pipe
 
-
 def varname(p):
     for line in inspect.getframeinfo(inspect.currentframe().f_back)[3]:
         m = re.search(r'\bvarname\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', line)
@@ -168,8 +169,6 @@ def varname(p):
             return m.group(1)
 
 ### Especificas para prueba Machine Learning twitter.
-
-
 def columns_reorder(X, new_columns_ordered):
     if sorted(X.columns.to_list()) == sorted(new_columns_ordered):
         return X[new_columns_ordered]
@@ -183,9 +182,58 @@ def multi_class_remapping(X,group_classes = {}, var_name='sentiment', neutral_cl
     random.choice(list_sentiments) if s == neutral_class else s)
     return X
 
-
 def remove_arrobas(X, var_name='content'):
-    X[f'{var_name}_remarroba'] = X[var_name].apply(lambda s: re.sub(r'(\@[a-zA-Z0-9\-\_]*)', '', s))
+    X.insert(0 , f'{var_name}_remarroba', X[var_name].apply(
+        lambda s: re.sub(r'(\@[a-zA-Z0-9\-\_]*)', '', s)))
+    return X
+
+def match_regex_exp(string='',exp=''):
+    string_found = re.findall(exp, string+" ")
+    if len(string_found)==0:
+        return ""
+    if len(string_found)>1:
+        return '_____________'.join(string_found)
+    return string_found[0]
+
+def remove_links(X, var_name='content'):
+    exps = [
+            r'(https?\s*?\:\s*?.*?(?=\s|\,|\"|\)|\]))',
+            r'(www\.(?!\.|\s|\,).*?(?=\s|\,|\"|\)|\]))',
+            r'[^\s|\,]*[^\.]\.(?:com|org|uk)'
+            ]
+
+    NX = X.copy()
+    XRL = NX[var_name]
+    XAL = pd.Series([], dtype='O')
+    count = 0
+    for exp in exps:
+        XL = XRL.apply(lambda s: match_regex_exp(s, exp))
+        XL.index = XRL.index.astype(str) + f'_{count}'
+        XL = XL.replace("", float("NaN")).dropna()
+        XAL = pd.concat([XAL, XL], axis=0)
+        XRL = XRL.apply(lambda s: re.sub(exp, '', s+" "))
+        count+=1
+        
+    X.insert(0, f'{var_name}_remlinks', XRL)
+    XAL.to_csv('http_links_removed.csv')
+    XRL.to_csv('clean_twits.csv')
+    return X
+
+def remove_chars(X, var_name='content',char_list=[('','')] ):
+    NX = X.copy()
+    XR = NX[var_name]
+    for char in char_list:
+        XR = XR.apply(lambda s: re.sub(char[0],char[1],s))
+    X.insert(0, f'{var_name}_remchars', XR.str.lower())
+
+    return X
+
+def target_encoding(X,mapping,column_to_encode='sentiment_remapped'):
+    NX = X.copy()
+    XR = NX[column_to_encode]
+    for cl,nc in mapping:
+        XR = XR.mask(XR == cl,nc)
+    X[column_to_encode] = XR
     return X
 
 class PreprocBCT():
@@ -199,6 +247,7 @@ class PreprocBCT():
     def fit(self, X, Y):
         # Punto 2
         NX = X.copy()
+        identify_high_correlations = lambda x,y : x+y # solo para evitar warnings, debe borrarse.
         corrs = identify_high_correlations(NX, self.threshold)
         if(len(corrs) > 0):
             while(abs(corrs.value.iloc[0]) > self.threshold):
@@ -232,7 +281,7 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
             nltk.download('words',download_dir='.')
 
         self.dictionary = stopwords.words('english')
-        self.columns = text_columns
+        self.text_columns = text_columns
 
     def fit(self, X, Y):
         return self
@@ -244,7 +293,7 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
     def transform(self, X, Y=None):
         NX = X.copy()
         try:
-            for col in self.columns:
+            for col in self.text_columns:
                 NX[f"{col}_sw"] = NX[col].apply(self.create_clean_column)
         except Exception as err:
             print('RemoveStopWords.transform(): {}'.format(err))
@@ -253,7 +302,6 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
         return self.transform(X, Y)
-
 
 class LemmantizerTransformer(BaseEstimator,TransformerMixin):
     def __init__(self, text_columns=[], stemmers='ps'):
@@ -266,7 +314,7 @@ class LemmantizerTransformer(BaseEstimator,TransformerMixin):
         self.wnl = nltk.wordnet.WordNetLemmatizer()
         self.sno = nltk.stem.SnowballStemmer('english')
         self.ps = nltk.stem.PorterStemmer()
-        self.columns = text_columns
+        self.text_columns = text_columns
         self.stemmers = stemmers
 
     def fit(self, X, Y):
@@ -294,7 +342,7 @@ class LemmantizerTransformer(BaseEstimator,TransformerMixin):
     def transform(self, X, Y=None):
         NX = X.copy()
         try:
-            for col in self.columns:
+            for col in self.text_columns:
                 if 'ps' in self.stemmers:
                     NX[f"{col}_ps"] = NX[col].apply(self.create_lemma_column, method='ps')
                 if 'sno' in self.stemmers:
@@ -317,7 +365,7 @@ class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
             nltk.download('words',download_dir='.')
 
         self.dictionary = stopwords.words('english')
-        self.twit_text_column = text_column
+        self.text_column = text_column
         self.features_to_extract = features_to_extract
         
     def fit(self, X, Y):
@@ -348,19 +396,19 @@ class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
         NX = X.copy()
         try:
             if "arrobas_count" in self.features_to_extract:
-                NX[f"var_arrobas_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\@[a-zA-Z0-9\-\_]*)', threshold=3)
+                NX[f"var_arrobas_count"] = NX[self.text_column].apply(self.regex_count, patt= r'(\@[a-zA-Z0-9\-\_]*)', threshold=3)
             if "hashtag_count" in self.features_to_extract:
-                NX[f"var_hashtag_count"] = NX[self.twit_text_column].apply(self.regex_count, patt= r'(\#[a-zA-Z0-9\-\_]*)', threshold=1)
+                NX[f"var_hashtag_count"] = NX[self.text_column].apply(self.regex_count, patt= r'(\#[a-zA-Z0-9\-\_]*)', threshold=1)
             if "is_reply" in self.features_to_extract:
-                NX[f"var_is_reply"] = NX[self.twit_text_column].apply(self.is_reply)
+                NX[f"var_is_reply"] = NX[self.text_column].apply(self.is_reply)
             if "is_rt" in self.features_to_extract:
-                NX[f"var_is_rt"] = NX[self.twit_text_column].apply(self.is_rt)
+                NX[f"var_is_rt"] = NX[self.text_column].apply(self.is_rt)
             if "subjectivity" in self.features_to_extract:
-                NX[f"var_subjectivity"] = NX[self.twit_text_column].apply(self.getSubjectivity) 
+                NX[f"var_subjectivity"] = NX[self.text_column].apply(self.getSubjectivity) 
             if "polarity" in self.features_to_extract:
-                NX[f"var_polarity"] = NX[self.twit_text_column].apply(self.getPolarity)
+                NX[f"var_polarity"] = NX[self.text_column].apply(self.getPolarity)
             if "twitt_length" in self.features_to_extract:
-                NX[f"var_twit_length"] = NX[self.twit_text_column].apply(lambda x: len(x))
+                NX[f"var_twit_length"] = NX[self.text_column].apply(lambda x: len(x))
             
 
         except Exception as err:
@@ -370,3 +418,47 @@ class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
         return self.transform(X, Y)
+
+class Vectorizer(BaseEstimator,TransformerMixin):
+    def __init__(self, vect_type='count', text_column='content', min_df=.1):
+        self.vect_type = vect_type
+        self.text_column = text_column
+        self.min_df = min_df
+
+    def fit(self, X, Y):
+        return self
+
+    def transform(self, X, Y=None):
+
+        try:
+            NX = X.copy()
+            Txt_sel = NX[self.text_column]
+            if self.vect_type == 'count':
+                cvec = CountVectorizer(min_df = self.min_df)
+            elif self.vect_type == 'tfid':
+                cvec = TfidfVectorizer(min_df = self.min_df)
+            else:
+                raise Exception('Solo se acepta "count" y "tfid" para min_df')
+            features = cvec.fit_transform(Txt_sel)
+            count_vect_df = pd.DataFrame(features.todense(), columns=['var_token_' + sub for sub in list(cvec.get_feature_names_out())], index=Txt_sel.index)
+            with open("tokens.txt", "w") as text_file:
+                text_file.write("\n".join(cvec.get_feature_names_out()))
+            NX = pd.concat([NX, count_vect_df], axis=1)
+        except Exception as err:
+            print('Vectorizer.transform(): {}'.format(err))
+        return NX
+
+    def fit_transform(self, X, Y=None):
+        self.fit(X, Y)
+        return self.transform(X, Y)
+
+class ColumnSelectedTransformer():
+    def __init__(self, vars_prefix='var_'):
+        self.vars_prefix = vars_prefix
+
+    def transform(self,X,y=None):
+        filter_col = [col for col in X.columns if col.startswith(self.vars_prefix)]
+        return X[filter_col]
+
+    def fit(self, X, y=None):
+        return self 
