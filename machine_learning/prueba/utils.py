@@ -233,45 +233,9 @@ def target_encoding(X,mapping,column_to_encode='sentiment_remapped'):
     XR = NX[column_to_encode]
     for cl,nc in mapping:
         XR = XR.mask(XR == cl,nc)
-    X[column_to_encode] = XR
+    X[column_to_encode] = XR.astype('int32')
     return X
 
-class PreprocBCT():
-    def __init__(self, under=None, upper=None, threshold=.8):
-        self.selector = None
-        self.under = under
-        self.upper = upper
-        self.threshold = threshold
-        self.variables_eliminidas = []
-
-    def fit(self, X, Y):
-        # Punto 2
-        NX = X.copy()
-        identify_high_correlations = lambda x,y : x+y # solo para evitar warnings, debe borrarse.
-        corrs = identify_high_correlations(NX, self.threshold)
-        if(len(corrs) > 0):
-            while(abs(corrs.value.iloc[0]) > self.threshold):
-                NX = NX.drop(columns=corrs.var2.iloc[0])
-                self.variables_eliminidas.append(corrs.var2.iloc[0])
-                corrs = identify_high_correlations(NX, self.threshold)
-                if (len(corrs) == 0):
-                    break
-        return self
-
-    def transform(self, X, Y=None):
-        NX = X.copy()
-        try:
-            # Punto 2
-            NX = NX.drop(columns=self.variables_eliminidas)
-
-        except Exception as err:
-            print('MyFeatureSelector.transform(): {}'.format(err))
-        return NX
-
-
-    def fit_transform(self, X, Y=None):
-        self.fit(X, Y)
-        return self.transform(X, Y)
 
 class RemoveStopWords(BaseEstimator,TransformerMixin):
     def __init__(self, text_columns=[]):
