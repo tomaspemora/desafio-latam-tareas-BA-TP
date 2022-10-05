@@ -46,6 +46,11 @@ def create_suitable_dataframe(df):
         - df: Un objeto pandas.DataFrame 
     returns: 
     """
+    #Limpieza de variables de ubicación "xcoord" e "ycoord"
+    df = df.loc[df["xcoord"] != " ", :]
+    df["xcoord"] = df["xcoord"].apply(lambda x: float(x))
+    df["ycoord"] = df["ycoord"].apply(lambda x: float(x))
+
     ### Obtener columnas por tipo de dato
     object_data_type = infer_datatype(df, 'object')
     integer_data_type = infer_datatype(df, 'int')
@@ -82,7 +87,7 @@ def create_suitable_dataframe(df):
     # Filtrar solo mayores de 18 años y menores de 100
     df['age_individual'] = np.where(np.logical_and(df['age'] > 18, df['age'] < 100), df['age'], np.nan)
     proc_df = df.dropna()
-    preserve_vars = suitable_categorical_attributes + ['month', 'meters']
+    preserve_vars = suitable_categorical_attributes + ['month', 'meters', "xcoord", "ycoord"]
     proc_df = proc_df.loc[:, preserve_vars] # Agregar los atributos sintéticos al df
     return proc_df, suitable_categorical_attributes, suitable_numerical_attributes
 
