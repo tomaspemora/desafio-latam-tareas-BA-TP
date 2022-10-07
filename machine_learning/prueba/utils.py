@@ -389,9 +389,6 @@ class Vectorizer(BaseEstimator,TransformerMixin):
         self.ngram_range = ngram_range
 
     def fit(self, X, Y):
-        print('fit')
-        display(f'X.shape {X.shape}')
-        # try:
         NX = X.copy()
         Txt_sel = NX[self.text_column]
         if self.vect_type == 'count':
@@ -402,23 +399,14 @@ class Vectorizer(BaseEstimator,TransformerMixin):
             raise Exception('Solo se acepta "count" y "tfid" para min_df')
         self.features = self.cvec.fit_transform(Txt_sel)
         self.tokens = ['var_token_' + sub for sub in list(self.cvec.get_feature_names_out())]
-        display(f'len tokens {len(self.tokens)}')
-        # except Exception as err:
-        # print('Vectorizer.transform(): {}'.format(err))
         return self
 
     def transform(self, X, Y=None):
-        print('transform')
-        display(X.shape)
-        try:
-            NX = X.copy()
-            Txt_sel = NX[self.text_column]
-            features = self.cvec.transform(Txt_sel)
-            count_vect_df = pd.DataFrame(features.todense(), columns=self.tokens, index=Txt_sel.index)
-            NX = pd.concat([NX, count_vect_df], axis=1)
-            display(f'len tokens {len(self.tokens)}')
-        except Exception as err:
-            print('Vectorizer.transform(): {}'.format(err))
+        NX = X.copy()
+        Txt_sel = NX[self.text_column]
+        features = self.cvec.transform(Txt_sel)
+        count_vect_df = pd.DataFrame(features.todense(), columns=self.tokens, index=Txt_sel.index)
+        NX = pd.concat([NX, count_vect_df], axis=1)
         return NX
 
     def fit_transform(self, X, Y=None):
