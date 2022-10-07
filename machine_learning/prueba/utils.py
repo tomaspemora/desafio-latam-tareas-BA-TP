@@ -19,6 +19,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.compose import ColumnTransformer
 import pandas as pd
 from sklearn.pipeline import Pipeline
+from nltk.tokenize import word_tokenize
 
 ## AGREGAR DOCSTRING
 
@@ -183,8 +184,8 @@ def multi_class_remapping(X,group_classes = {}, var_name='sentiment', neutral_cl
     return X
 
 def remove_arrobas(X, var_name='content'):
-    X.insert(0 , f'{var_name}_remarroba', X[var_name].apply(
-        lambda s: re.sub(r'(\@[a-zA-Z0-9\-\_]*)', '', s)))
+    X[f'{var_name}_remarroba']= X[var_name].apply(
+        lambda s: re.sub(r'(\@[a-zA-Z0-9\-\_]*)', '', s))
     return X
 
 def match_regex_exp(string='',exp=''):
@@ -214,7 +215,7 @@ def remove_links(X, var_name='content'):
         XRL = XRL.apply(lambda s: re.sub(exp, '', s+" "))
         count+=1
         
-    X.insert(0, f'{var_name}_remlinks', XRL)
+    X[f'{var_name}_remlinks'] = XRL
     XAL.to_csv('http_links_removed.csv')
     XRL.to_csv('clean_twits.csv')
     return X
@@ -224,7 +225,7 @@ def remove_chars(X, var_name='content',char_list=[('','')] ):
     XR = NX[var_name]
     for char in char_list:
         XR = XR.apply(lambda s: re.sub(char[0],char[1],s))
-    X.insert(0, f'{var_name}_remchars', XR.str.lower())
+    X[f'{var_name}_remchars'] = XR.str.lower()
 
     return X
 
@@ -238,7 +239,7 @@ def target_encoding(X,mapping,column_to_encode='sentiment_remapped'):
 
 
 class RemoveStopWords(BaseEstimator,TransformerMixin):
-    def __init__(self, text_columns=[]):
+    def __init__(self, text_columns=[], bool_trans=True):
         try:
             nltk.data.find('corpora/stopwords')
         except LookupError:
@@ -246,22 +247,25 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
 
         self.dictionary = stopwords.words('english')
         self.text_columns = text_columns
+        self.bool_trans = bool_trans
 
     def fit(self, X, Y):
         return self
 
     def create_clean_column(self,twitt):
-        return " ".join([word for word in twitt.split(" ") if word not in self.dictionary]).lower()
+        return " ".join([word for word in word_tokenize(twitt) if word not in self.dictionary]).lower()
 
 
     def transform(self, X, Y=None):
-        NX = X.copy()
-        try:
-            for col in self.text_columns:
-                NX[f"{col}_sw"] = NX[col].apply(self.create_clean_column)
-        except Exception as err:
-            print('RemoveStopWords.transform(): {}'.format(err))
-        return NX
+        if self.bool_trans:
+            NX = X.copy()
+            try:
+                for col in self.text_columns:
+                    NX[f"{col}_sw"] = NX[col].apply(self.create_clean_column)
+            except Exception as err:
+                print('RemoveStopWords.transform(): {}'.format(err))
+            return NX
+        return X
 
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
@@ -323,12 +327,7 @@ class LemmantizerTransformer(BaseEstimator,TransformerMixin):
 
 class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
     def __init__(self, text_column="content_min", features_to_extract = []):
-        try:
-            nltk.data.find('corpora/stopwords')
-        except LookupError:
-            nltk.download('words',download_dir='.')
-
-        self.dictionary = stopwords.words('english')
+        
         self.text_column = text_column
         self.features_to_extract = features_to_extract
         
@@ -373,8 +372,6 @@ class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
                 NX[f"var_polarity"] = NX[self.text_column].apply(self.getPolarity)
             if "twitt_length" in self.features_to_extract:
                 NX[f"var_twit_length"] = NX[self.text_column].apply(lambda x: len(x))
-            
-
         except Exception as err:
             print('FeatureExtractionTwitts.transform(): {}'.format(err))
         return NX
@@ -384,30 +381,42 @@ class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
         return self.transform(X, Y)
 
 class Vectorizer(BaseEstimator,TransformerMixin):
-    def __init__(self, vect_type='count', text_column='content', min_df=.1):
+    def __init__(self, vect_type='count', text_column='content', min_df=.1, max_df=.8,ngram_range=(1,1)):
         self.vect_type = vect_type
         self.text_column = text_column
         self.min_df = min_df
+        self.max_df = max_df
+        self.ngram_range = ngram_range
 
     def fit(self, X, Y):
+        print('fit')
+        display(f'X.shape {X.shape}')
+        # try:
+        NX = X.copy()
+        Txt_sel = NX[self.text_column]
+        if self.vect_type == 'count':
+            self.cvec = CountVectorizer(min_df=self.min_df, max_df=self.max_df, ngram_range = self.ngram_range)
+        elif self.vect_type == 'tfid':
+            self.cvec = TfidfVectorizer(min_df = self.min_df, max_df = self.max_df, ngram_range = self.ngram_range)
+        else:
+            raise Exception('Solo se acepta "count" y "tfid" para min_df')
+        self.features = self.cvec.fit_transform(Txt_sel)
+        self.tokens = ['var_token_' + sub for sub in list(self.cvec.get_feature_names_out())]
+        display(f'len tokens {len(self.tokens)}')
+        # except Exception as err:
+        # print('Vectorizer.transform(): {}'.format(err))
         return self
 
     def transform(self, X, Y=None):
-
+        print('transform')
+        display(X.shape)
         try:
             NX = X.copy()
             Txt_sel = NX[self.text_column]
-            if self.vect_type == 'count':
-                cvec = CountVectorizer(min_df = self.min_df)
-            elif self.vect_type == 'tfid':
-                cvec = TfidfVectorizer(min_df = self.min_df)
-            else:
-                raise Exception('Solo se acepta "count" y "tfid" para min_df')
-            features = cvec.fit_transform(Txt_sel)
-            count_vect_df = pd.DataFrame(features.todense(), columns=['var_token_' + sub for sub in list(cvec.get_feature_names_out())], index=Txt_sel.index)
-            with open("tokens.txt", "w") as text_file:
-                text_file.write("\n".join(cvec.get_feature_names_out()))
+            features = self.cvec.transform(Txt_sel)
+            count_vect_df = pd.DataFrame(features.todense(), columns=self.tokens, index=Txt_sel.index)
             NX = pd.concat([NX, count_vect_df], axis=1)
+            display(f'len tokens {len(self.tokens)}')
         except Exception as err:
             print('Vectorizer.transform(): {}'.format(err))
         return NX
