@@ -20,6 +20,7 @@ from sklearn.compose import ColumnTransformer
 import pandas as pd
 from sklearn.pipeline import Pipeline
 from nltk.tokenize import word_tokenize
+from datetime import datetime
 
 ## AGREGAR DOCSTRING
 
@@ -272,7 +273,7 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
         return self.transform(X, Y)
 
 class LemmantizerTransformer(BaseEstimator,TransformerMixin):
-    def __init__(self, text_columns=[], stemmers='ps'):
+    def __init__(self, text_columns=[], stemmer='ps'):
         try:
             nltk.data.find('corpora/wordnet.zip')
             nltk.data.find('corpora/omw-1.4.zip/omw-1.4/')
@@ -283,7 +284,7 @@ class LemmantizerTransformer(BaseEstimator,TransformerMixin):
         self.sno = nltk.stem.SnowballStemmer('english')
         self.ps = nltk.stem.PorterStemmer()
         self.text_columns = text_columns
-        self.stemmers = stemmers
+        self.stemmer = stemmer
 
     def fit(self, X, Y):
         return self
@@ -311,12 +312,12 @@ class LemmantizerTransformer(BaseEstimator,TransformerMixin):
         NX = X.copy()
         try:
             for col in self.text_columns:
-                if 'ps' in self.stemmers:
-                    NX[f"{col}_ps"] = NX[col].apply(self.create_lemma_column, method='ps')
-                if 'sno' in self.stemmers:
-                    NX[f"{col}_sno"] = NX[col].apply(self.create_lemma_column, method = 'sno')
-                if 'wnl' in self.stemmers:
-                    NX[f"{col}_wnl"] = NX[col].apply(self.create_lemma_column, method = 'wnl')
+                if 'ps' == self.stemmer:
+                    NX[f"{col}_stemmer"] = NX[col].apply(self.create_lemma_column, method='ps')
+                elif 'sno' == self.stemmer:
+                    NX[f"{col}_stemmer"] = NX[col].apply(self.create_lemma_column, method = 'sno')
+                elif 'wnl' == self.stemmer:
+                    NX[f"{col}_stemmer"] = NX[col].apply(self.create_lemma_column, method = 'wnl')
         except Exception as err:
             print('LemmantizerTransformer.transform(): {}'.format(err))
         return NX
@@ -348,7 +349,7 @@ class FeatureExtractionTwitts(BaseEstimator,TransformerMixin):
         if self.regex_count(twitt,patt=r'(^RT*)')>0:
             return 1
         return 0
-
+    
     def getSubjectivity(self, text):
         return TextBlob(text).sentiment.subjectivity
 
@@ -397,7 +398,7 @@ class Vectorizer(BaseEstimator,TransformerMixin):
             self.cvec = TfidfVectorizer(min_df = self.min_df, max_df = self.max_df, ngram_range = self.ngram_range)
         else:
             raise Exception('Solo se acepta "count" y "tfid" para min_df')
-        self.features = self.cvec.fit_transform(Txt_sel)
+        self.cvec.fit(Txt_sel)
         self.tokens = ['var_token_' + sub for sub in list(self.cvec.get_feature_names_out())]
         return self
 
@@ -417,9 +418,114 @@ class ColumnSelectedTransformer():
     def __init__(self, vars_prefix='var_'):
         self.vars_prefix = vars_prefix
 
+    def fit(self, X, y=None):
+        return self 
+
     def transform(self,X,y=None):
         filter_col = [col for col in X.columns if col.startswith(self.vars_prefix)]
         return X[filter_col]
 
-    def fit(self, X, y=None):
-        return self 
+
+class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
+    # def __init__(self,  ):
+
+
+    def infer_datatype(self,df, datatype, drop_none=True):
+        """ A partir de un dataset y un tipo de datos entregado, devuelve los nombres de las columnas
+            del dataset que tienen el correspondiente tipo de dato.
+            
+            Argumentos:
+            - df: Dataframe de pandas.
+            - datatype: String con el tipo de dato que se desea consultar a las columnas del dataframe.
+            - drop_none: Filtra las columnas cuyo tipo de dato no esté especificado. default = True.
+        """
+        tmp_list = [i if df[i].dtype == datatype else None for i in df.columns]
+        if drop_none is True:
+            tmp_list = list(filter(lambda x: x != None, tmp_list))
+
+        return tmp_list
+
+
+    def return_time_string(self,var, date_format='%m%d%Y'):
+        return var.apply(lambda x: datetime.strptime(str(x), date_format))
+
+
+    def count_freq(self,df, selected_columns):
+        """ Cuenta la cantidad de valores únicos y la frecuencia de dichos valores en las columnas
+            entregadas por `selected_columns`.
+            
+            Argumentos:
+                - df: dataframe que contiene las columnas en cuestión.
+                - selected_columns: Columnas del dataframe de las que se quiere saber la frecuencia de valores.
+        """
+        return {i: df[i].unique().shape[0] for i in selected_columns}
+    
+    def fit(self, X, Y):
+        NX = X.copy()
+        #Limpieza de variables de ubicación "xcoord" e "ycoord"
+        NX = NX.loc[NX["xcoord"] != " ", :]
+
+        NX.loc[:, "xcoord"] = NX["xcoord"].apply(lambda x: float(x))
+        NX.loc[:, "ycoord"] = NX["ycoord"].apply(lambda x: float(x))
+
+        ### Obtener columnas por tipo de dato
+        object_data_type = self.infer_datatype(NX, 'object')
+        integer_data_type = self.infer_datatype(NX, 'int')
+        float_data_type = self.infer_datatype(NX, 'float')
+        
+        # Quiero recuperar la lista de valores numericos tambien
+        suitable_numerical_attributes = list(integer_data_type) + list(float_data_type)
+        # print(suitable_numerical_attributes)
+        
+        ### Contar la cantidad de clases en el caso de las var. categóricas y frecuencia de valores para las numéricas
+        object_unique_vals = self.count_freq(NX, object_data_type)
+        int_unique_vals = self.count_freq(NX, integer_data_type)
+        float_unique_vals = self.count_freq(NX, float_data_type)
+        
+        ### Selección de atributos categoricos que cumplen con características deseadas
+        suitable_categorical_attributes = dict(filter(lambda x: x[1] < 100 and x[1] >= 2, object_unique_vals.items()))
+        suitable_categorical_attributes = list(suitable_categorical_attributes.keys())
+        
+        preserve_vars = suitable_categorical_attributes + ['month', 'meters', "xcoord", "ycoord"]
+        self.preserve_vars = preserve_vars
+        self.suitable_categorical_attributes = suitable_categorical_attributes
+        self.suitable_numerical_attributes = suitable_numerical_attributes
+
+        return self
+        
+    def transform(self, X, Y):
+        NX = X.copy()
+        #Limpieza de variables de ubicación "xcoord" e "ycoord"
+        NX = NX.loc[NX["xcoord"] != " ", :]
+        
+        NX.loc[:,"xcoord"] = NX["xcoord"].apply(lambda x: float(x))
+        NX.loc[:,"ycoord"] = NX["ycoord"].apply(lambda x: float(x))
+        
+        ### Reemplazo de clases faltantes
+        ### {N: No, Y: Yes, U: Unknown}
+        NX['officrid'] = np.where(NX['officrid'] == ' ', 'N', 'Y')
+        NX['offshld'] = np.where(NX['offshld'] == ' ', 'N', 'Y')
+        NX['sector'] = np.where(NX['sector'] == ' ', 'U', NX['sector'])
+        NX['trhsloc'] = np.where(NX['trhsloc'] == ' ', 'U', NX['trhsloc'])
+        NX['beat'] = np.where(NX['beat'] == ' ', 'U', NX['beat'])
+        NX['offverb'] = np.where(NX['offverb'] == ' ', 'N', 'Y')
+
+        meters = NX['ht_feet'].astype(str) + '.' + NX['ht_inch'].astype(str)
+        # Conversión de distanca a sistema metrico (non retarded)
+        NX['meters'] = meters.apply(lambda x: float(x) * 0.3048)
+        NX['month'] = self.return_time_string(NX['datestop']).apply(
+            lambda x: x.month)  # Agregación a solo meses
+
+        ### Calculo de la edad del suspechoso
+        # age_individual = self.return_time_string(NX['dob']).apply(lambda x: 2009 - x.year)
+        # Filtrar solo mayores de 18 años y menores de 100
+        NX['age_individual'] = np.where(np.logical_and(NX['age'] > 18, NX['age'] < 100), NX['age'], np.nan)
+        NX = NX.dropna()
+        NX = NX.loc[:, self.preserve_vars] # Agregar los atributos sintéticos al df
+        Y = Y[NX.index]
+        return NX, Y
+
+    def fit_transform(self, X, Y):
+        display(Y)
+        self.fit(X, Y)
+        return self.transform(X, Y)
