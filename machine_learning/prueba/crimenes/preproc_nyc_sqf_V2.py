@@ -48,8 +48,9 @@ def create_suitable_dataframe(df):
     """
     #Limpieza de variables de ubicación "xcoord" e "ycoord"
     df = df.loc[df["xcoord"] != " ", :]
-    df["xcoord"] = df["xcoord"].apply(lambda x: float(x))
-    df["ycoord"] = df["ycoord"].apply(lambda x: float(x))
+    # df_copy = df.copy()
+    df.loc[:,"xcoord"] = df["xcoord"].apply(lambda x: float(x))
+    df.loc[:,"ycoord"] = df["ycoord"].apply(lambda x: float(x))
 
     ### Obtener columnas por tipo de dato
     object_data_type = infer_datatype(df, 'object')
