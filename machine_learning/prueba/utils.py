@@ -434,6 +434,33 @@ class ColumnSelectedTransformer():
         filter_col = [col for col in X.columns if col.startswith(self.vars_prefix)]
         return X[filter_col]
 
+from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.models import Sequential
+
+class KerasCustomClassifier(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        pass
+
+    def make_model(self,n_features, hidden_1=32, drop=0.2, optimizer="Adam"):
+        model = Sequential(name = 'titanic')
+        model.add(Dense(name = 'hidden_1', units = hidden_1, activation = 'relu' ,input_shape=(n_features, )))
+        model.add(Dropout(name ='drop', rate = drop))
+        model.add(Dense(name = 'output', units = 1, activation = 'sigmoid'))
+        model.compile(loss='binary_crossentropy', optimizer = optimizer, metrics = 'accuracy')
+        return model
+
+    def predict(self, X):
+        return self.base_estimator.predict(X)
+
+    def classify(self, inputs):
+        return self.base_estimator.classify(inputs)
+
+    def fit(self, X, y):
+        n_features = X.shape[1]
+        self.base_estimator = KerasClassifier(self.make_model, n_features=n_features)
+        self.base_estimator.fit(X,y)
+
 ## Aqui parte para crimenes
 class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
     def __init__(self):
