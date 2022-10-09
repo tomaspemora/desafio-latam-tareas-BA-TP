@@ -167,6 +167,12 @@ def train_function(pipe, X_train, X_test, y_train, y_test):
     print(classification_report(y_test, y_pred, digits=4))
     return pipe
 
+def test_function(pipe, X_test, y_test):
+    y_pred = pipe.predict(X_test)
+    print('test')
+    print(classification_report(y_test, y_pred, digits=4))
+    return pipe
+
 def varname(p):
     for line in inspect.getframeinfo(inspect.currentframe().f_back)[3]:
         m = re.search(r'\bvarname\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', line)
@@ -471,6 +477,9 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
 
         NX.loc[:, "xcoord"] = NX["xcoord"].apply(lambda x: np.nan if x==' ' else float(x))
         NX.loc[:, "ycoord"] = NX["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        self.ciudad_moda = NX['city'].mode()
+        NX.loc[:, "city"] = NX["city"].apply(lambda x: self.ciudad_moda if x == ' ' else x).apply(lambda x: 'STATEN ISLAND' if x == 'STATEN IS' else x)
+
         # NX.loc[:, "post"] = NX["post"].apply(lambda x: np.nan if x==' ' else int(x))
         ### Obtener columnas por tipo de dato
         object_data_type = self.infer_datatype(NX, 'object')
@@ -503,6 +512,7 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
         
         NX.loc[:,"xcoord"] = NX["xcoord"].apply(lambda x: np.nan if x==' ' else float(x))
         NX.loc[:,"ycoord"] = NX["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        NX.loc[:, "city"] = NX["city"].apply(lambda x: self.ciudad_moda if x == ' ' else x).apply(lambda x: 'STATEN ISLAND' if x == 'STATEN IS' else x)
         # NX.loc[:, "post"] = NX["post"].apply(lambda x: np.nan if x==' ' else int(x))
         
         ### Reemplazo de clases faltantes
