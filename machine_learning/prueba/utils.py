@@ -21,6 +21,8 @@ import pandas as pd
 from sklearn.pipeline import Pipeline
 from nltk.tokenize import word_tokenize
 from datetime import datetime
+from feature_engine.encoding import OrdinalEncoder
+
 
 ## AGREGAR DOCSTRING
 
@@ -153,6 +155,7 @@ def cat_num_rate_analysis(df):
     display(cmr.sort_values(by="num_to_cat_rate",ascending=False))
     pd.set_option('display.max_rows', max_rows)
     pd.set_option('display.max_colwidth', max_width)
+    return cmr
 
 def train_function(pipe, X_train, X_test, y_train, y_test):
     pipe.fit(X_train, y_train)
@@ -425,10 +428,11 @@ class ColumnSelectedTransformer():
         filter_col = [col for col in X.columns if col.startswith(self.vars_prefix)]
         return X[filter_col]
 
-
+## Aqui parte para crimenes
 class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
-    # def __init__(self,  ):
-
+    def __init__(self):
+        self.preserve_vars = []
+        self.suitable_categorical_attributes = []
 
     def infer_datatype(self,df, datatype, drop_none=True):
         """ A partir de un dataset y un tipo de datos entregado, devuelve los nombres de las columnas
@@ -465,9 +469,9 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
         #Limpieza de variables de ubicación "xcoord" e "ycoord"
         NX = NX.loc[NX["xcoord"] != " ", :]
 
-        NX.loc[:, "xcoord"] = NX["xcoord"].apply(lambda x: float(x))
-        NX.loc[:, "ycoord"] = NX["ycoord"].apply(lambda x: float(x))
-
+        NX.loc[:, "xcoord"] = NX["xcoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        NX.loc[:, "ycoord"] = NX["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        # NX.loc[:, "post"] = NX["post"].apply(lambda x: np.nan if x==' ' else int(x))
         ### Obtener columnas por tipo de dato
         object_data_type = self.infer_datatype(NX, 'object')
         integer_data_type = self.infer_datatype(NX, 'int')
@@ -493,39 +497,100 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
 
         return self
         
-    def transform(self, X, Y):
+    def transform(self, X, Y=None):
         NX = X.copy()
         #Limpieza de variables de ubicación "xcoord" e "ycoord"
-        NX = NX.loc[NX["xcoord"] != " ", :]
         
-        NX.loc[:,"xcoord"] = NX["xcoord"].apply(lambda x: float(x))
-        NX.loc[:,"ycoord"] = NX["ycoord"].apply(lambda x: float(x))
+        NX.loc[:,"xcoord"] = NX["xcoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        NX.loc[:,"ycoord"] = NX["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        # NX.loc[:, "post"] = NX["post"].apply(lambda x: np.nan if x==' ' else int(x))
         
         ### Reemplazo de clases faltantes
         ### {N: No, Y: Yes, U: Unknown}
-        NX['officrid'] = np.where(NX['officrid'] == ' ', 'N', 'Y')
+
+        # NX['officrid'] = np.where(NX['officrid'] == ' ', 'N', 'Y')
         NX['offshld'] = np.where(NX['offshld'] == ' ', 'N', 'Y')
-        NX['sector'] = np.where(NX['sector'] == ' ', 'U', NX['sector'])
-        NX['trhsloc'] = np.where(NX['trhsloc'] == ' ', 'U', NX['trhsloc'])
-        NX['beat'] = np.where(NX['beat'] == ' ', 'U', NX['beat'])
-        NX['offverb'] = np.where(NX['offverb'] == ' ', 'N', 'Y')
+        # NX['sector'] = np.where(NX['sector'] == ' ', 'U', NX['sector'])
+        # NX['trhsloc'] = np.where(NX['trhsloc'] == ' ', 'U', NX['trhsloc'])
+        # NX['beat'] = np.where(NX['beat'] == ' ', 'U', NX['beat'])
+        # NX['offverb'] = np.where(NX['offverb'] == ' ', 'N', 'Y')
 
         meters = NX['ht_feet'].astype(str) + '.' + NX['ht_inch'].astype(str)
         # Conversión de distanca a sistema metrico (non retarded)
         NX['meters'] = meters.apply(lambda x: float(x) * 0.3048)
         NX['month'] = self.return_time_string(NX['datestop']).apply(
             lambda x: x.month)  # Agregación a solo meses
-
-        ### Calculo de la edad del suspechoso
-        # age_individual = self.return_time_string(NX['dob']).apply(lambda x: 2009 - x.year)
-        # Filtrar solo mayores de 18 años y menores de 100
-        NX['age_individual'] = np.where(np.logical_and(NX['age'] > 18, NX['age'] < 100), NX['age'], np.nan)
-        NX = NX.dropna()
         NX = NX.loc[:, self.preserve_vars] # Agregar los atributos sintéticos al df
-        Y = Y[NX.index]
-        return NX, Y
+        return NX
 
-    def fit_transform(self, X, Y):
-        display(Y)
+    def fit_transform(self, X, Y=None):
+        self.fit(X, Y)
+        return self.transform(X, Y)
+
+
+class OrdinalEncoderFixedTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self,encoding_method, csd):
+        self.csd = csd
+        self.encoding_method = encoding_method
+
+    def fit(self, X, Y):
+        self.encoded_columns = self.csd.suitable_categorical_attributes
+        self.encoder = OrdinalEncoder(encoding_method=self.encoding_method, variables=self.csd.suitable_categorical_attributes)
+        self.encoder.fit(X,Y)
+        return self
+        
+    def transform(self, X, Y=None):
+        return self.encoder.transform(X)
+
+    def fit_transform(self, X, Y=None):
+        self.fit(X, Y)
+        return self.transform(X, Y)
+
+class DropRowsTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        pass
+
+    def fit(self, X, Y):
+        return self
+        
+    def transform(self, X, Y=None):
+        X = X.loc[X["xcoord"] != " ", :]
+        X = X.loc[X["ycoord"] != " ", :]
+        X['age_individual'] = np.where(np.logical_and(X['age'] > 18, X['age'] < 100), X['age'], np.nan) # Evaluar si mantener esta condición, no la entiendo bien
+        X = X.dropna()
+        return X
+
+    def fit_transform(self, X, Y=None):
+        self.fit(X, Y)
+        return self.transform(X, Y)
+
+def split_features_target(df):
+    ## Definición target y_1
+    y_1 = (df.arstmade == 'Y').astype(int)
+    
+    ## Transformación target y_2
+    var_pf = df.columns[np.where([i[0:2]=='pf' for i in df.columns.tolist()])]. tolist()
+    u = df[var_pf]
+    y_2 = pd.Series([int(np.isin(["Y"], u.iloc[i].values.tolist())[0]) for i in range(0,len(u))], name='violence')
+
+    ## Predictores para y_1 e y_2: hay un subconjunto de potenciales predictores para y_1 y otro para y_2
+    x_1 = df.drop(columns=['arstmade'])
+    var_eliminar_pf = ["pf_baton", "pf_hcuff", "pf_pepsp", "pf_other", "pf_ptwep", "pf_drwep", "pf_wall", "pf_hands", "pf_grnd"] #9 variables eliminadas
+    x_2 = df.drop(columns = var_eliminar_pf)
+    
+    return x_1, y_1, x_2, y_2
+
+class CriterioExperto(BaseEstimator, TransformerMixin):
+    def __init__(self,columns):
+        self.columns = columns
+
+    def fit(self, X, Y):
+        return self
+        
+    def transform(self, X, Y=None):
+        
+        return X.drop(columns = self.columns)
+
+    def fit_transform(self, X, Y=None):
         self.fit(X, Y)
         return self.transform(X, Y)
