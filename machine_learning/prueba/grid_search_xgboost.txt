@@ -1,0 +1,5 @@
+({'model__learning_rate': 0.02,
+  'model__max_depth': 4,
+  'model__n_estimators': 100,
+  'model__subsample': 0.5},
+ recall: 0.3365217391304348)

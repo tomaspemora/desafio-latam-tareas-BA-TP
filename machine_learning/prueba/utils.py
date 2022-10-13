@@ -7,7 +7,7 @@ from sklearn.metrics import r2_score, mean_squared_error, median_absolute_error
 from IPython.display import HTML
 import pickle
 from sklearn.metrics import classification_report
-import inspect, re
+import inspect, re, os
 import nltk
 from nltk.corpus import stopwords
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -22,7 +22,9 @@ from sklearn.pipeline import Pipeline
 from nltk.tokenize import word_tokenize
 from datetime import datetime
 from feature_engine.encoding import OrdinalEncoder
-
+from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.models import Sequential
 
 ## AGREGAR DOCSTRING
 
@@ -45,7 +47,6 @@ def make_pretty(styler, num_format='{:.2f}'):
     d3 = dict(selector=".index_name",props=[('text-align', 'center')])
     d4 = dict(selector="th.col_heading",props=[('text-align', 'center')])
     styler.format(num_format)
-    #styler.format_index(lambda v: v.upper())
     styler.background_gradient(axis=None, cmap="YlGnBu")
     styler.set_table_styles([d1,d2,d3,d4])
     styler.set_properties(**{'border': '1px black solid !important', 'text-align': 'center'})
@@ -53,7 +54,6 @@ def make_pretty(styler, num_format='{:.2f}'):
     styler.set_table_styles([{'selector': 'td','props': [('border', '2px black solid !important'), ('min-width','90px'), ('max-width','90px'), ('width','90px'), ('text-align','center')]}])
     styler.set_table_styles([{'selector': '.index_name','props': [('border', '2px black solid !important'), ('min-width','90px'), ('max-width','90px'), ('width','90px'), ('text-align','center')]}])
     styler.set_table_styles([{'selector': 'th.col_heading','props': [('border', '2px black solid !important'), ('min-width','90px'), ('max-width','90px'), ('width','90px'), ('text-align','center')]}])
-    #styler.applymap_index(lambda v: "min-width:90px;max-width:90px;width:90px", axis=0)
     return styler
 
 def get_type_vars(df):
@@ -193,8 +193,8 @@ def multi_class_remapping(X,group_classes = {}, var_name='sentiment', neutral_cl
     random.choice(list_sentiments) if s == neutral_class else s)
     return X
 
-def remove_arrobas(X, var_name='content'):
-    X[f'{var_name}_remarroba']= X[var_name].apply(
+def remove_arrobas(X, var_name='content', new_var_name='content_mod'):
+    X[new_var_name]= X[var_name].apply(
         lambda s: re.sub(r'(\@[a-zA-Z0-9\-\_]*)', '', s))
     return X
 
@@ -206,7 +206,7 @@ def match_regex_exp(string='',exp=''):
         return '_____________'.join(string_found)
     return string_found[0]
 
-def remove_links(X, var_name='content'):
+def remove_links(X, var_name='content', new_var_name = 'content_mod'):
     exps = [
             r'(https?\s*?\:\s*?.*?(?=\s|\,|\"|\)|\]))',
             r'(www\.(?!\.|\s|\,).*?(?=\s|\,|\"|\)|\]))',
@@ -225,17 +225,17 @@ def remove_links(X, var_name='content'):
         XRL = XRL.apply(lambda s: re.sub(exp, '', s+" "))
         count+=1
         
-    X[f'{var_name}_remlinks'] = XRL
+    X[new_var_name] = XRL
     XAL.to_csv('http_links_removed.csv')
     XRL.to_csv('clean_twits.csv')
     return X
 
-def remove_chars(X, var_name='content',char_list=[('','')] ):
+def remove_chars(X, var_name='content', new_var_name = 'content_mod',char_list=[('','')] ):
     NX = X.copy()
     XR = NX[var_name]
     for char in char_list:
         XR = XR.apply(lambda s: re.sub(char[0],char[1],s))
-    X[f'{var_name}_remchars'] = XR.str.lower()
+    X[new_var_name] = XR.str.lower()
 
     return X
 
@@ -249,7 +249,7 @@ def target_encoding(X,mapping,column_to_encode='sentiment_remapped'):
 
 
 class RemoveStopWords(BaseEstimator,TransformerMixin):
-    def __init__(self, text_columns=[], bool_trans=True):
+    def __init__(self, text_columns=[]):
         try:
             nltk.data.find('corpora/stopwords')
         except LookupError:
@@ -257,7 +257,6 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
 
         self.dictionary = stopwords.words('english')
         self.text_columns = text_columns
-        self.bool_trans = bool_trans
 
     def fit(self, X, Y):
         return self
@@ -267,15 +266,13 @@ class RemoveStopWords(BaseEstimator,TransformerMixin):
 
 
     def transform(self, X, Y=None):
-        if self.bool_trans:
-            NX = X.copy()
-            try:
-                for col in self.text_columns:
-                    NX[f"{col}_sw"] = NX[col].apply(self.create_clean_column)
-            except Exception as err:
-                print('RemoveStopWords.transform(): {}'.format(err))
-            return NX
-        return X
+        NX = X.copy()
+        try:
+            for col in self.text_columns:
+                NX[col] = NX[col].apply(self.create_clean_column)
+        except Exception as err:
+            print('RemoveStopWords.transform(): {}'.format(err))
+        return NX
 
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
@@ -322,11 +319,11 @@ class LemmantizerTransformer(BaseEstimator,TransformerMixin):
         try:
             for col in self.text_columns:
                 if 'ps' == self.stemmer:
-                    NX[f"{col}_stemmer"] = NX[col].apply(self.create_lemma_column, method='ps')
+                    NX[col] = NX[col].apply(self.create_lemma_column, method='ps')
                 elif 'sno' == self.stemmer:
-                    NX[f"{col}_stemmer"] = NX[col].apply(self.create_lemma_column, method = 'sno')
+                    NX[col] = NX[col].apply(self.create_lemma_column, method = 'sno')
                 elif 'wnl' == self.stemmer:
-                    NX[f"{col}_stemmer"] = NX[col].apply(self.create_lemma_column, method = 'wnl')
+                    NX[col] = NX[col].apply(self.create_lemma_column, method = 'wnl')
         except Exception as err:
             print('LemmantizerTransformer.transform(): {}'.format(err))
         return NX
@@ -426,29 +423,48 @@ class Vectorizer(BaseEstimator,TransformerMixin):
 class ColumnSelectedTransformer():
     def __init__(self, vars_prefix='var_'):
         self.vars_prefix = vars_prefix
-
+        self.predictors_length = None
     def fit(self, X, y=None):
         return self 
 
     def transform(self,X,y=None):
         filter_col = [col for col in X.columns if col.startswith(self.vars_prefix)]
+        self.predictors_length = X[filter_col].shape[1]
         return X[filter_col]
 
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.models import Sequential
-
 class KerasCustomClassifier(BaseEstimator, TransformerMixin):
-    def __init__(self):
-        pass
+    def __init__(self, 
+                    nn_arch, 
+                    loss = 'binary_crossentropy',
+                    optimizer = 'Adam',
+                    metrics = 'accuracy',
+                    net_name = 'keras_custom_net',
+                    epochs = 10
+                    ):
+        self.nn_arch = nn_arch
+        self.loss = loss
+        self.optimizer = optimizer
+        self.metrics = metrics
+        self.net_name = net_name
+        self.epochs = epochs
 
-    def make_model(self,n_features, hidden_1=32, drop=0.2, optimizer="Adam"):
-        model = Sequential(name = 'titanic')
-        model.add(Dense(name = 'hidden_1', units = hidden_1, activation = 'relu' ,input_shape=(n_features, )))
-        model.add(Dropout(name ='drop', rate = drop))
-        model.add(Dense(name = 'output', units = 1, activation = 'sigmoid'))
-        model.compile(loss='binary_crossentropy', optimizer = optimizer, metrics = 'accuracy')
+    def make_model(self, n_features):
+        model = Sequential(name=self.net_name)
+        for key,val in self.nn_arch.items():
+            if val[0] == 'input_dense':
+                model.add(Dense(name=key, units=val[1], activation=val[2], input_shape=(n_features,)))
+            elif val[0] == 'dense':
+                model.add(Dense(name = key, units = val[1], activation=val[2]))
+            elif val[0] == 'dropout':
+                model.add(Dropout(name = key, rate = val[1]))
+            else:
+                raise Exception(f"El tipo de elemento {val[0]} no es válido para agregar a la red.")
+        model.compile(loss=self.loss, optimizer=self.optimizer, metrics=self.metrics)
+
         return model
+    
+    def fsummary(self):
+        return self.base_estimator.model.summary(line_length=100)
 
     def predict(self, X):
         return self.base_estimator.predict(X)
@@ -459,14 +475,14 @@ class KerasCustomClassifier(BaseEstimator, TransformerMixin):
     def fit(self, X, y):
         n_features = X.shape[1]
         self.base_estimator = KerasClassifier(self.make_model, n_features=n_features)
-        self.base_estimator.fit(X,y)
+        self.base_estimator.fit(X,y, epochs=self.epochs)
 
 ## Aqui parte para crimenes
 class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
     def __init__(self):
         self.preserve_vars = []
         self.suitable_categorical_attributes = []
-
+        
     def infer_datatype(self,df, datatype, drop_none=True):
         """ A partir de un dataset y un tipo de datos entregado, devuelve los nombres de las columnas
             del dataset que tienen el correspondiente tipo de dato.
@@ -498,29 +514,24 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
         return {i: df[i].unique().shape[0] for i in selected_columns}
     
     def fit(self, X, Y):
-        NX = X.copy()
         #Limpieza de variables de ubicación "xcoord" e "ycoord"
-        NX = NX.loc[NX["xcoord"] != " ", :]
-
-        NX.loc[:, "xcoord"] = NX["xcoord"].apply(lambda x: np.nan if x==' ' else float(x))
-        NX.loc[:, "ycoord"] = NX["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
-        self.ciudad_moda = NX['city'].mode()
-        NX.loc[:, "city"] = NX["city"].apply(lambda x: self.ciudad_moda if x == ' ' else x).apply(lambda x: 'STATEN ISLAND' if x == 'STATEN IS' else x)
-
-        # NX.loc[:, "post"] = NX["post"].apply(lambda x: np.nan if x==' ' else int(x))
+        X.loc[:, "xcoord"] = X["xcoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        X.loc[:, "ycoord"] = X["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        self.ciudad_moda = X['city'].mode()
+        X.loc[:, "city"] = X["city"].apply(lambda x: self.ciudad_moda if x == ' ' else x).apply(lambda x: 'STATEN ISLAND' if x == 'STATEN IS' else x)
+        
         ### Obtener columnas por tipo de dato
-        object_data_type = self.infer_datatype(NX, 'object')
-        integer_data_type = self.infer_datatype(NX, 'int')
-        float_data_type = self.infer_datatype(NX, 'float')
+        object_data_type = self.infer_datatype(X, 'object')
+        integer_data_type = self.infer_datatype(X, 'int')
+        float_data_type = self.infer_datatype(X, 'float')
         
         # Quiero recuperar la lista de valores numericos tambien
         suitable_numerical_attributes = list(integer_data_type) + list(float_data_type)
-        # print(suitable_numerical_attributes)
         
         ### Contar la cantidad de clases en el caso de las var. categóricas y frecuencia de valores para las numéricas
-        object_unique_vals = self.count_freq(NX, object_data_type)
-        int_unique_vals = self.count_freq(NX, integer_data_type)
-        float_unique_vals = self.count_freq(NX, float_data_type)
+        object_unique_vals = self.count_freq(X, object_data_type)
+        int_unique_vals = self.count_freq(X, integer_data_type)
+        float_unique_vals = self.count_freq(X, float_data_type)
         
         ### Selección de atributos categoricos que cumplen con características deseadas
         suitable_categorical_attributes = dict(filter(lambda x: x[1] < 100 and x[1] >= 2, object_unique_vals.items()))
@@ -534,31 +545,24 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
         return self
         
     def transform(self, X, Y=None):
-        NX = X.copy()
         #Limpieza de variables de ubicación "xcoord" e "ycoord"
-        
-        NX.loc[:,"xcoord"] = NX["xcoord"].apply(lambda x: np.nan if x==' ' else float(x))
-        NX.loc[:,"ycoord"] = NX["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
-        NX.loc[:, "city"] = NX["city"].apply(lambda x: self.ciudad_moda if x == ' ' else x).apply(lambda x: 'STATEN ISLAND' if x == 'STATEN IS' else x)
-        # NX.loc[:, "post"] = NX["post"].apply(lambda x: np.nan if x==' ' else int(x))
+        X.loc[:,"xcoord"] = X["xcoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        X.loc[:,"ycoord"] = X["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
+        X.loc[:, "city"] = X["city"].apply(lambda x: self.ciudad_moda if x == ' ' else x).apply(lambda x: 'STATEN ISLAND' if x == 'STATEN IS' else x)
         
         ### Reemplazo de clases faltantes
         ### {N: No, Y: Yes, U: Unknown}
+        X['offshld'] = np.where(X['offshld'] == ' ', 'N', 'Y')
+        meters = X['ht_feet'].astype(str) + '.' + X['ht_inch'].astype(str)
 
-        # NX['officrid'] = np.where(NX['officrid'] == ' ', 'N', 'Y')
-        NX['offshld'] = np.where(NX['offshld'] == ' ', 'N', 'Y')
-        # NX['sector'] = np.where(NX['sector'] == ' ', 'U', NX['sector'])
-        # NX['trhsloc'] = np.where(NX['trhsloc'] == ' ', 'U', NX['trhsloc'])
-        # NX['beat'] = np.where(NX['beat'] == ' ', 'U', NX['beat'])
-        # NX['offverb'] = np.where(NX['offverb'] == ' ', 'N', 'Y')
-
-        meters = NX['ht_feet'].astype(str) + '.' + NX['ht_inch'].astype(str)
         # Conversión de distanca a sistema metrico (non retarded)
-        NX['meters'] = meters.apply(lambda x: float(x) * 0.3048)
-        NX['month'] = self.return_time_string(NX['datestop']).apply(
-            lambda x: x.month)  # Agregación a solo meses
-        NX = NX.loc[:, self.preserve_vars] # Agregar los atributos sintéticos al df
-        return NX
+        X['meters'] = meters.apply(lambda x: float(x) * 0.3048)
+        X['month'] = self.return_time_string(X['datestop']).apply(lambda x: x.month)  
+        
+        # Agregación a solo meses
+        X = X.loc[:, self.preserve_vars] # Agregar los atributos sintéticos al df
+        
+        return X
 
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
@@ -566,13 +570,12 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
 
 
 class OrdinalEncoderFixedTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self,encoding_method, csd):
-        self.csd = csd
+    def __init__(self,encoding_method):
         self.encoding_method = encoding_method
 
     def fit(self, X, Y):
-        self.encoded_columns = self.csd.suitable_categorical_attributes
-        self.encoder = OrdinalEncoder(encoding_method=self.encoding_method, variables=self.csd.suitable_categorical_attributes)
+        
+        self.encoder = OrdinalEncoder(encoding_method=self.encoding_method, variables=list(X.select_dtypes('O').columns))
         self.encoder.fit(X,Y)
         return self
         
@@ -602,17 +605,17 @@ class DropRowsTransformer(BaseEstimator, TransformerMixin):
         return self.transform(X, Y)
 
 def split_features_target(df):
-    ## Definición target y_1
+    # Definición target y_1
     y_1 = (df.arstmade == 'Y').astype(int)
     
-    ## Transformación target y_2
+    # Transformación target y_2
     var_pf = df.columns[np.where([i[0:2]=='pf' for i in df.columns.tolist()])]. tolist()
     u = df[var_pf]
     y_2 = pd.Series([int(np.isin(["Y"], u.iloc[i].values.tolist())[0]) for i in range(0,len(u))], name='violence')
 
-    ## Predictores para y_1 e y_2: hay un subconjunto de potenciales predictores para y_1 y otro para y_2
+    # Predictores para y_1 e y_2: hay un subconjunto de potenciales predictores para y_1 y otro para y_2
     x_1 = df.drop(columns=['arstmade'])
-    var_eliminar_pf = ["pf_baton", "pf_hcuff", "pf_pepsp", "pf_other", "pf_ptwep", "pf_drwep", "pf_wall", "pf_hands", "pf_grnd"] #9 variables eliminadas
+    var_eliminar_pf = ["pf_baton", "pf_hcuff", "pf_pepsp", "pf_other", "pf_ptwep", "pf_drwep", "pf_wall", "pf_hands", "pf_grnd"] # 9 variables eliminadas
     x_2 = df.drop(columns = var_eliminar_pf)
     
     return x_1, y_1, x_2, y_2
@@ -625,9 +628,9 @@ class CriterioExperto(BaseEstimator, TransformerMixin):
         return self
         
     def transform(self, X, Y=None):
-        
         return X.drop(columns = self.columns)
 
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
         return self.transform(X, Y)
+        
