@@ -145,9 +145,9 @@ def load_bytes_variable(nombre_archivo):
         return pickle.load(f)
 
 def cat_num_rate_analysis(df):
-    cat_num_rate = df.apply(lambda col: (len(col.unique())/len(col), len(col.unique()), len(col),col.dtype ,  col.unique()))
+    cat_num_rate = df.apply(lambda col: (len(col.unique())/len(col), len(col.unique()), len(col),col.dtype ,  col.unique(), col.isnull().sum()))
     cmr = pd.DataFrame(cat_num_rate.T)
-    cmr.columns=["num_to_cat_rate", "len of unique", "len of data", "col type", "unique of col"]
+    cmr.columns=["num_to_cat_rate", "len of unique", "len of data", "col type", "unique of col", 'count of nan']
     max_rows = pd.get_option('display.max_rows')
     max_width = pd.get_option('display.max_colwidth')
     pd.set_option('display.max_colwidth', 150)
@@ -550,6 +550,7 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
         X.loc[:,"ycoord"] = X["ycoord"].apply(lambda x: np.nan if x==' ' else float(x))
         X.loc[:, "city"] = X["city"].apply(lambda x: self.ciudad_moda if x == ' ' else x).apply(lambda x: 'STATEN ISLAND' if x == 'STATEN IS' else x)
         
+
         ### Reemplazo de clases faltantes
         ### {N: No, Y: Yes, U: Unknown}
         X['offshld'] = np.where(X['offshld'] == ' ', 'N', 'Y')
@@ -559,6 +560,12 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
         X['meters'] = meters.apply(lambda x: float(x) * 0.3048)
         X['month'] = self.return_time_string(X['datestop']).apply(lambda x: x.month)  
         
+        # Eliminación de columna con todos sus valores nulos
+        # cols = pd.Series(X.mean().isnull(), index=X.columns)
+        # if any(cols):
+        #     display(list(cols[cols==True].index))
+        #     X = X.drop(columns = list(cols[cols==True].index))
+
         # Agregación a solo meses
         X = X.loc[:, self.preserve_vars] # Agregar los atributos sintéticos al df
         
@@ -568,19 +575,22 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
         self.fit(X, Y)
         return self.transform(X, Y)
 
-
 class OrdinalEncoderFixedTransformer(BaseEstimator, TransformerMixin):
     def __init__(self,encoding_method):
         self.encoding_method = encoding_method
 
     def fit(self, X, Y):
-        
         self.encoder = OrdinalEncoder(encoding_method=self.encoding_method, variables=list(X.select_dtypes('O').columns))
         self.encoder.fit(X,Y)
         return self
         
     def transform(self, X, Y=None):
-        return self.encoder.transform(X)
+        # print('transform')
+        # cat_num_rate_analysis(X)
+        XT = self.encoder.transform(X)
+        # print('dps de transform')
+        # cat_num_rate_analysis(XT)
+        return XT
 
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
@@ -620,17 +630,53 @@ def split_features_target(df):
     
     return x_1, y_1, x_2, y_2
 
-class CriterioExperto(BaseEstimator, TransformerMixin):
-    def __init__(self,columns):
-        self.columns = columns
+def criterio_experto(X, columns):
+    cols_to_rem = list(set(list(X.columns)) & set(columns))
+    return X.drop(columns=cols_to_rem)
+
+def get_top_correlations_blog(df, threshold=0.4):
+    """
+    df: the dataframe to get correlations from
+    threshold: the maximum and minimum value to include for correlations. For eg, if this is 0.4, only pairs haveing a correlation coefficient greater than 0.4 or less than -0.4 will be included in the results. 
+    """
+    orig_corr = df.corr(method='pearson')
+    c = orig_corr.abs()
+
+    so = c.unstack()
+
+    # print("|    Variable 1    |    Variable 2    | Correlation Coefficient    |")
+    # print("|------------------|------------------|----------------------------|")
+    
+    i=0
+    pairs=set()
+    result = pd.DataFrame()
+    for index, value in so.sort_values(ascending=False).iteritems():
+        # Exclude duplicates and self-correlations
+        if value > threshold \
+        and index[0] != index[1] \
+        and (index[0], index[1]) not in pairs \
+        and (index[1], index[0]) not in pairs:
+            
+            # print(f'|    {index[0]}    |    {index[1]}    |    {orig_corr.loc[(index[0], index[1])]}    |')
+            result.loc[i, ['Variable 1', 'Variable 2', 'Correlation Coefficient']] = [index[0], index[1], orig_corr.loc[(index[0], index[1])]]
+            pairs.add((index[0], index[1]))
+            i+=1
+    return result.reset_index(drop=True).set_index(['Variable 1', 'Variable 2'])
+
+class PrintVars(BaseEstimator, TransformerMixin):
 
     def fit(self, X, Y):
+        # pd.set_option('display.max_rows', None)
+        # pd.set_option('display.max_columns', None)
+        # display(X)
         return self
         
     def transform(self, X, Y=None):
-        return X.drop(columns = self.columns)
+        # pd.set_option('display.max_rows', None)
+        # pd.set_option('display.max_columns', None)
+        # display(X)
+        return X
 
     def fit_transform(self, X, Y=None):
         self.fit(X, Y)
         return self.transform(X, Y)
-        
