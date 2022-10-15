@@ -462,7 +462,10 @@ class KerasCustomClassifier(BaseEstimator, TransformerMixin):
         model.compile(loss=self.loss, optimizer=self.optimizer, metrics=self.metrics)
 
         return model
-    
+        
+    def save(self,name):
+        self.base_estimator.save(name)
+
     def fsummary(self):
         return self.base_estimator.model.summary(line_length=100)
 
