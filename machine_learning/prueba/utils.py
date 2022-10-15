@@ -585,11 +585,7 @@ class OrdinalEncoderFixedTransformer(BaseEstimator, TransformerMixin):
         return self
         
     def transform(self, X, Y=None):
-        # print('transform')
-        # cat_num_rate_analysis(X)
         XT = self.encoder.transform(X)
-        # print('dps de transform')
-        # cat_num_rate_analysis(XT)
         return XT
 
     def fit_transform(self, X, Y=None):
@@ -606,7 +602,7 @@ class DropRowsTransformer(BaseEstimator, TransformerMixin):
     def transform(self, X, Y=None):
         X = X.loc[X["xcoord"] != " ", :]
         X = X.loc[X["ycoord"] != " ", :]
-        X['age_individual'] = np.where(np.logical_and(X['age'] > 18, X['age'] < 100), X['age'], np.nan) # Evaluar si mantener esta condición, no la entiendo bien
+        X['age_individual'] = np.where(np.logical_and(X['age'] > 18, X['age'] < 100), X['age'], np.nan)
         X = X.dropna()
         return X
 
@@ -614,19 +610,18 @@ class DropRowsTransformer(BaseEstimator, TransformerMixin):
         self.fit(X, Y)
         return self.transform(X, Y)
 
-def split_features_target(df):
+def split_features_target(df,vars_eliminar_y2):
     # Definición target y_1
     y_1 = (df.arstmade == 'Y').astype(int)
     
     # Transformación target y_2
     var_pf = df.columns[np.where([i[0:2]=='pf' for i in df.columns.tolist()])]. tolist()
     u = df[var_pf]
-    y_2 = pd.Series([int(np.isin(["Y"], u.iloc[i].values.tolist())[0]) for i in range(0,len(u))], name='violence')
+    y_2 = pd.Series([int(np.isin(["Y"], u.iloc[i].values.tolist())[0]) for i in range(0,len(u))], name='violence', index=df.index)
 
     # Predictores para y_1 e y_2: hay un subconjunto de potenciales predictores para y_1 y otro para y_2
     x_1 = df.drop(columns=['arstmade'])
-    var_eliminar_pf = ["pf_baton", "pf_hcuff", "pf_pepsp", "pf_other", "pf_ptwep", "pf_drwep", "pf_wall", "pf_hands", "pf_grnd"] # 9 variables eliminadas
-    x_2 = df.drop(columns = var_eliminar_pf)
+    x_2 = df.drop(columns = vars_eliminar_y2)
     
     return x_1, y_1, x_2, y_2
 
