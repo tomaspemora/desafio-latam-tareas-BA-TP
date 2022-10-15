@@ -462,7 +462,7 @@ class KerasCustomClassifier(BaseEstimator, TransformerMixin):
         model.compile(loss=self.loss, optimizer=self.optimizer, metrics=self.metrics)
 
         return model
-        
+
     def save(self,name):
         self.base_estimator.save(name)
 
@@ -561,15 +561,8 @@ class CreateSuitableDataframeTransformer(BaseEstimator,TransformerMixin):
 
         # Conversión de distanca a sistema metrico (non retarded)
         X['meters'] = meters.apply(lambda x: float(x) * 0.3048)
-        X['month'] = self.return_time_string(X['datestop']).apply(lambda x: x.month)  
+        X['month'] = self.return_time_string(X['datestop']).apply(lambda x: x.month)
         
-        # Eliminación de columna con todos sus valores nulos
-        # cols = pd.Series(X.mean().isnull(), index=X.columns)
-        # if any(cols):
-        #     display(list(cols[cols==True].index))
-        #     X = X.drop(columns = list(cols[cols==True].index))
-
-        # Agregación a solo meses
         X = X.loc[:, self.preserve_vars] # Agregar los atributos sintéticos al df
         
         return X
