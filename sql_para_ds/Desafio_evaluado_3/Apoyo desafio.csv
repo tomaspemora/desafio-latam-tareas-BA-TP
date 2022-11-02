@@ -1,0 +1,7 @@
+codigo_producto,producto,local,precio,existencia,stock,ubicacion,numero_bodega,vendedor,rut_vendedor,numero_boleta,cantidad_vendida,rut_cliente,nombre_cliente
+43,te,Las Rosas,2000,TRUE,30,Providencia,21,"Juan Pérez, Rosita",33333333,534,1,77777777,Fernando
+25,cafe,Los Pinos,1500,Si,40,Los Leones,35,"Jorge, Luisita",444444444,75643,1,3332323,Cristian
+6,leche,Los Estudiantes,900,1,10,Viña del Mar,40,Don Cristian,666666666,324,1,56434513,Angela
+64,queso,Las Rosas,2000,TRUE,70,Providencia,62,"Juan Pérez, Rosita",33333333,537,1,123267845,Iván
+25,cafe,Los Pinos,1500,Si,40,Los Leones,35,"Jorge, Luisita",444444444,7569,1,4537145,Felipe
+6,leche,Los Estudiantes,900,1,10,Viña del Mar,40,Don Cristian,666666666,326,1,42537634,Ernesto

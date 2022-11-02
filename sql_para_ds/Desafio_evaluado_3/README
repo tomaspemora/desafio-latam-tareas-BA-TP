@@ -1,0 +1,3 @@
+PARA EJECUTAR, CORRER LOS SIGUIENTES COMANDOS:
+- psql -U postgres -d postgres -c "create database inventario"
+- psql -U postgres -d inventario -f .\Creacion_tablas_y_queries.sql
