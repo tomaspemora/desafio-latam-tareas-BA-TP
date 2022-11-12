@@ -25,6 +25,7 @@ def report_performance(model, X_train, X_test, y_train, y_test, pickle_it=True):
 
     if pickle_it is True:
         model_name = str(model.__class__).replace("'>", '').split('.')[-1]
+        print(model_name)
         time_stamp = datetime.datetime.now().strftime('%d%m-%H')
         pickle.dump(tmp_model_train,
                     open(f"./{y_train.name}_{model_name}_{time_stamp}.pkl", 'wb')
