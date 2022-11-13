@@ -1,16 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
-import pickle, datetime, os, glob
-import pandas as pd
-import numpy as np
-import psycopg2
 from sklearn.pipeline import Pipeline
+import pickle, datetime, os
 from pathlib import Path
 import os.path
-
 
 def report_performance(model, model_name, target_name, X_train, X_test, y_train, y_test, pickle_it=True, force_retrain=False):
     """Given a sklearn model class, a partitioned database in train and test,
