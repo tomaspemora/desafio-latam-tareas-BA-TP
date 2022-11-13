@@ -7,8 +7,12 @@ import pickle, datetime, os, glob
 import pandas as pd
 import numpy as np
 import psycopg2
+from sklearn.pipeline import Pipeline
+from pathlib import Path
+import os.path
 
-def report_performance(model, X_train, X_test, y_train, y_test, pickle_it=True):
+
+def report_performance(model, model_name, target_name, X_train, X_test, y_train, y_test, pickle_it=True, force_retrain=False):
     """Given a sklearn model class, a partitioned database in train and test,
     train the model, print a classification_report and pickle the trained model.
 
@@ -21,16 +25,19 @@ def report_performance(model, X_train, X_test, y_train, y_test, pickle_it=True):
     :returns: TODO
 
     """
-    tmp_model_train = model.fit(X_train, y_train)
-
-    if pickle_it is True:
-        model_name = str(model.__class__).replace("'>", '').split('.')[-1]
-        print(model_name)
-        time_stamp = datetime.datetime.now().strftime('%d%m-%H')
-        pickle.dump(tmp_model_train,
-                    open(f"./{y_train.name}_{model_name}_{time_stamp}.pkl", 'wb')
-                    )
-    print(classification_report(y_test, tmp_model_train.predict(X_test)))
+    print(model_name)
+    time_stamp = datetime.datetime.now().strftime('%d%m-%H')
+    if not os.path.isfile(f"./models/{y_train.name}__{model_name}__{time_stamp}.pkl") or force_retrain:
+        tmp_model_train = model.fit(X_train, y_train)
+        if pickle_it is True:
+            Path("./models").mkdir(parents=True, exist_ok=True)
+            pickle.dump(
+                {'model': tmp_model_train, 'target': target_name, 'model_name': model_name},
+                open(f"./models/{y_train.name}__{model_name}__{time_stamp}.pkl", 'wb')
+            )
+        print(classification_report(y_test, tmp_model_train.predict(X_test)))
+    else:
+        print(f'El modelo no se entrenó porque ya existía el archivo {f"./models/{y_train.name}__{model_name}__{time_stamp}.pkl"}')
 
 def create_crosstab(pickled_model, X_test, y_test, variables):
     """Returns a pd.DataFrame with k-variable defined crosstab and its prediction on hold out test
@@ -43,16 +50,17 @@ def create_crosstab(pickled_model, X_test, y_test, variables):
 
     """
     tmp_training = X_test.copy()
-    unpickle_model = pickle.load(open(pickled_model, 'rb'))
-    tmp_training[f"{y_test.name}_yhat"] = unpickle_model.predict(X_test)
+    unpickle_obj = pickle.load(open(pickled_model, 'rb'))
+    tmp_training[f"{y_test.name}_yhat"] = unpickle_obj['model'].predict(X_test)
 
     if isinstance(variables, list) is True:
         tmp_query = tmp_training.groupby(variables)[f"{y_test.name}_yhat"].mean()
     else:
         raise TypeError('Variables argument must be a list object')
 
-    del tmp_training, unpickle_model
-    return tmp_query
+    del tmp_training
+    return tmp_query, unpickle_obj['target'], unpickle_obj['model_name']
 
-
+def pipeline_maker(**kwargs):
+    return Pipeline(steps=[(key,value) for key,value in kwargs.items()])
 
